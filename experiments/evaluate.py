@@ -11,6 +11,7 @@ Usage (from the repo root):
 Metrics, per model:
 - surface recall   share of labelled surfaces that some predicted box overlaps (IoU >= 0.3)
 - family accuracy  of those matched surfaces, share whose predicted family is acceptable
+                   (paint and plaster count as the same family, see FAMILY_ALIASES)
 - group agreement  for pairs of matched surfaces in one photo, share where "same material?"
                    agrees with the labels (this is the dedupe step)
 - photos complete  photos where every labelled material group was found at least once
@@ -32,6 +33,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 MATCH_IOU = 0.3
 EXTRA_IOU = 0.1
+
+# Families the catalog doesn't sell and that look alike in photos are scored as one.
+# Pat sells neither paint nor plaster, so telling them apart doesn't matter for matching.
+FAMILY_ALIASES = {"paint": "smooth_finish", "plaster": "smooth_finish"}
+
+
+def canon(family: str) -> str:
+    return FAMILY_ALIASES.get(family, family)
+
 
 Box = tuple[float, float, float, float]
 
@@ -92,7 +102,7 @@ def score_photo(labels: list[Label], preds: list[Pred]) -> dict:
     return {
         "labels": len(labels),
         "found": len(found),
-        "family_ok": sum(p.family in lab.families for lab, p in found),
+        "family_ok": sum(canon(p.family) in {canon(f) for f in lab.families} for lab, p in found),
         "pairs": len(pairs),
         "pairs_ok": sum((a.group == b.group) == (pa.group == pb.group) for (a, pa), (b, pb) in pairs),
         "complete": {lab.group for lab in labels} <= {lab.group for lab, _ in found},

@@ -93,6 +93,11 @@ class EvaluateTests(unittest.TestCase):
         self.assertGreater(s.swapped_recall, s.recall + 0.1)
         self.assertIn("x/y swapped", evaluate.render([s]))
 
+    def test_paint_and_plaster_count_as_one_family(self) -> None:
+        lab = evaluate.Label((0, 0, 500, 500), ("paint",), "A")
+        photo = evaluate.score_photo([lab], [evaluate.Pred((0, 0, 500, 500), "plaster", "A")])
+        self.assertEqual(photo["family_ok"], 1)
+
     def test_empty_predictions_score_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
