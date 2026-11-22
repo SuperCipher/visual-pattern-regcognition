@@ -1,0 +1,7 @@
+# Sample photos are third-party images: keep them out of this public repo.
+experiments/samples/
+experiments/out/
+.env
+__pycache__/
+.venv/
+result
