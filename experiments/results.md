@@ -1,4 +1,8 @@
 # Step 1 results
 
-Not run yet. Run `uv run experiments/run_vlm.py` then `uv run experiments/evaluate.py` to fill
-this in.
+| Model | Photos (failed) | Surface recall | Family accuracy | Same-material agreement | Photos complete | Extra boxes | Latency mean / max | Cost per photo |
+|---|---|---|---|---|---|---|---|---|
+| `google/gemini-2.5-flash` | 11 (1) | 41% | 67% | 75% | 2/11 | 9 | 17.3s / 84.4s | $0.0023 |
+| `qwen/qwen3-vl-235b-a22b-instruct` | 11 (0) | 80% | 80% | 83% | 7/11 | 18 | 12.4s / 51.8s | $0.0014 |
+
+Targets from PLAN.md: photos complete >= 9/11, family accuracy >= 85%, cost <= $0.005 per photo, latency <= 10 s.
