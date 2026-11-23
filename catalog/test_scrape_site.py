@@ -48,6 +48,18 @@ class ScrapeParseTests(unittest.TestCase):
         raw = {**PRODUCT, "images": [{"src": "https://x/IMG_1.jpg"}], "name": "No code here"}
         self.assertEqual(s.parse_product(raw).code, "ID2274")
 
+    def test_bookmatch_flip_sheet_keeps_its_own_image(self) -> None:
+        raw = {
+            **PRODUCT,
+            "name": "HPL Nero Portoro Marble Design Flip",
+            "images": [{"src": "https://x/BBNL-9048-Flip.jpg"}],
+        }
+        p = s.parse_product(raw)
+        self.assertEqual(
+            (p.code, p.variant, p.image_file), ("BBNL-9048", "flip", "images/BBNL-9048-flip.jpg")
+        )
+        self.assertEqual(s.parse_product(PRODUCT).variant, "")
+
     def test_product_without_image_is_skipped(self) -> None:
         self.assertIsNone(s.parse_product({**PRODUCT, "images": []}))
 

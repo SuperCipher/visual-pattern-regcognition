@@ -54,6 +54,7 @@ CATEGORY_MAP = {
 @dataclass(frozen=True)
 class Product:
     code: str
+    variant: str  # "" or "flip": bookmatch decors are sold as a normal + mirrored sheet pair
     name: str
     decor_category: str
     site_categories: tuple[str, ...]
@@ -93,14 +94,18 @@ def parse_product(raw: dict[str, Any]) -> Product | None:
     src = images[0]["src"]
     code = find_code(Path(urllib.parse.urlparse(src).path).name, raw.get("name", "")) or f"ID{raw['id']}"
     slugs = [c["slug"] for c in raw.get("categories", [])]
+    filename = Path(urllib.parse.urlparse(src).path).name
+    variant = "flip" if "FLIP" in f"{filename} {raw.get('name', '')}".upper() else ""
+    stem = f"{code}-{variant}" if variant else code
     return Product(
         code=code,
+        variant=variant,
         name=html.unescape(raw.get("name", "")).strip(),
         decor_category=decor_category(slugs),
         site_categories=tuple(slugs),
         url=raw.get("permalink", ""),
         image_url=src,
-        image_file=f"images/{code}{Path(urllib.parse.urlparse(src).path).suffix.lower() or '.jpg'}",
+        image_file=f"images/{stem}{Path(filename).suffix.lower() or '.jpg'}",
     )
 
 
@@ -168,11 +173,14 @@ def main() -> int:
     out: Path = args.out
 
     products = [p for raw in get_all("/wp-json/wc/store/v1/products") if (p := parse_product(raw))]
-    dupes = len(products) - len({p.code for p in products})
+    dupes = len(products) - len({p.image_file for p in products})
     (out / "products.json").write_text(
         json.dumps([asdict(p) for p in products], indent=2, ensure_ascii=False)
     )
-    print(f"products: {len(products)} ({dupes} duplicate codes)")
+    flips = sum(p.variant == "flip" for p in products)
+    print(f"products: {len(products)}, {len({p.code for p in products})} decor codes, {flips} flip sheets")
+    if dupes:
+        print(f"  ! {dupes} products share an image file name; check the site data", file=sys.stderr)
 
     projects = [parse_project(raw) for raw in get_all("/wp-json/wp/v2/project?_fields=id,link,title,content")]
     (out / "projects.json").write_text(
