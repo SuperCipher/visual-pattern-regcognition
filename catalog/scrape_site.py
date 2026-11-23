@@ -27,7 +27,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +109,22 @@ def parse_product(raw: dict[str, Any]) -> Product | None:
     )
 
 
+def unique_files(products: list[Product]) -> list[Product]:
+    """Give later products a -2, -3... suffix when two would save to the same image file.
+
+    The site has e.g. two different "Flip" sheets under BBNL-149, which would overwrite each other.
+    """
+    seen: dict[str, int] = {}
+    out = []
+    for p in products:
+        n = seen[p.image_file] = seen.get(p.image_file, 0) + 1
+        if n > 1:
+            stem, ext = p.image_file.rsplit(".", 1)
+            p = replace(p, image_file=f"{stem}-{n}.{ext}")
+        out.append(p)
+    return out
+
+
 def full_size(url: str) -> str:
     """WordPress thumbnails end in -1024x682.jpg; strip that to get the original upload."""
     return re.sub(r"-\d{2,4}x\d{2,4}(?=\.\w+$)", "", url)
@@ -172,7 +188,9 @@ def main() -> int:
     args = ap.parse_args()
     out: Path = args.out
 
-    products = [p for raw in get_all("/wp-json/wc/store/v1/products") if (p := parse_product(raw))]
+    products = unique_files(
+        [p for raw in get_all("/wp-json/wc/store/v1/products") if (p := parse_product(raw))]
+    )
     dupes = len(products) - len({p.image_file for p in products})
     (out / "products.json").write_text(
         json.dumps([asdict(p) for p in products], indent=2, ensure_ascii=False)

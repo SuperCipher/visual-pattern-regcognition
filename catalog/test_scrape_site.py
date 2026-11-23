@@ -60,6 +60,12 @@ class ScrapeParseTests(unittest.TestCase):
         )
         self.assertEqual(s.parse_product(PRODUCT).variant, "")
 
+    def test_colliding_image_files_get_a_suffix(self) -> None:
+        a = s.parse_product({**PRODUCT, "images": [{"src": "https://x/BBNL-149-Flip.jpg"}]})
+        b = s.parse_product({**PRODUCT, "images": [{"src": "https://x/BBNL-149-Flip-1.jpg"}]})
+        files = [p.image_file for p in s.unique_files([a, b])]
+        self.assertEqual(files, ["images/BBNL-149-flip.jpg", "images/BBNL-149-flip-2.jpg"])
+
     def test_product_without_image_is_skipped(self) -> None:
         self.assertIsNone(s.parse_product({**PRODUCT, "images": []}))
 
