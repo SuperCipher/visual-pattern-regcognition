@@ -5,3 +5,8 @@ experiments/out/
 __pycache__/
 .venv/
 result
+
+# Scraped catalog binaries (re-create with catalog/scrape_site.py)
+catalog/images/
+catalog/projects/
+catalog/*.pdf
