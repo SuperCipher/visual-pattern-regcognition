@@ -1,0 +1,69 @@
+{
+  "_about": "Hand labels for samples/interiors/01..11.png. Boxes are rough [x1,y1,x2,y2] on a 0-1000 grid. 'family' may list several acceptable answers when the material is ambiguous from the photo. Surfaces with the same 'group' are the same material. Floors, furniture and countertops are excluded on purpose.",
+  "01.png": [
+    {"box": [0, 0, 1000, 185], "surface_type": "ceiling", "family": ["wood"], "group": "A", "note": "light oak ceiling"},
+    {"box": [95, 185, 415, 800], "surface_type": "wall", "family": ["wood"], "group": "A", "note": "oak panelled wall"},
+    {"box": [415, 185, 1000, 430], "surface_type": "wall", "family": ["wood"], "group": "A", "note": "oak wall behind shelves"},
+    {"box": [700, 620, 1000, 790], "surface_type": "counter_front", "family": ["wood"], "group": "A", "note": "oak cabinet fronts"},
+    {"box": [415, 430, 1000, 610], "surface_type": "backsplash", "family": ["stone"], "group": "B", "note": "green veined marble"},
+    {"box": [165, 630, 765, 1000], "surface_type": "island", "family": ["stone"], "group": "B", "note": "green veined marble island"}
+  ],
+  "02.png": [
+    {"box": [30, 0, 300, 1000], "surface_type": "wall", "family": ["stone", "tile"], "group": "A", "note": "travertine-look large format panels"},
+    {"box": [700, 0, 1000, 1000], "surface_type": "wall", "family": ["stone", "tile"], "group": "A", "note": "travertine-look large format panels"},
+    {"box": [300, 0, 700, 1000], "surface_type": "wall", "family": ["mosaic", "tile"], "group": "B", "note": "dark green glass mosaic"}
+  ],
+  "03.png": [
+    {"box": [0, 100, 470, 900], "surface_type": "wall", "family": ["paint"], "group": "A", "note": "cream painted panelling with mouldings"},
+    {"box": [470, 470, 830, 700], "surface_type": "wall", "family": ["paint"], "group": "A", "note": "back wall, cream panelling"},
+    {"box": [820, 60, 1000, 1000], "surface_type": "wall", "family": ["paint"], "group": "A", "note": "curved wall, cream"},
+    {"box": [100, 0, 820, 470], "surface_type": "ceiling", "family": ["paint", "plaster"], "group": "A", "note": "cream ceiling"}
+  ],
+  "04.png": [
+    {"box": [115, 50, 340, 1000], "surface_type": "wall", "family": ["wallpaper"], "group": "A", "note": "navy chinoiserie mural"},
+    {"box": [700, 50, 890, 1000], "surface_type": "wall", "family": ["wallpaper"], "group": "A", "note": "navy chinoiserie mural"},
+    {"box": [115, 0, 890, 330], "surface_type": "ceiling", "family": ["wallpaper"], "group": "A", "note": "vaulted ceiling, same mural"},
+    {"box": [290, 250, 720, 940], "surface_type": "wall", "family": ["paint"], "group": "B", "note": "navy painted arch surround"},
+    {"box": [0, 0, 115, 1000], "surface_type": "wall", "family": ["paint"], "group": "C", "note": "cream panelling, left"},
+    {"box": [890, 0, 1000, 1000], "surface_type": "wall", "family": ["paint"], "group": "C", "note": "cream panelling, right"}
+  ],
+  "05.png": [
+    {"box": [100, 0, 900, 190], "surface_type": "ceiling", "family": ["paint"], "group": "C", "note": "white coffered ceiling"},
+    {"box": [0, 180, 300, 1000], "surface_type": "wall", "family": ["wood"], "group": "A", "note": "dark walnut panelling, left"},
+    {"box": [690, 180, 1000, 1000], "surface_type": "wall", "family": ["wood"], "group": "A", "note": "dark walnut panelling, right"},
+    {"box": [300, 250, 690, 1000], "surface_type": "niche", "family": ["wallpaper"], "group": "B", "note": "blue and gold damask"}
+  ],
+  "06.png": [
+    {"box": [70, 30, 930, 320], "surface_type": "ceiling", "family": ["plaster", "metal"], "group": "A", "note": "gold metallic plaster dome"},
+    {"box": [100, 370, 1000, 720], "surface_type": "wall", "family": ["plaster", "stone", "paint", "fabric"], "group": "B", "note": "beige wall panels, hard to tell material"},
+    {"box": [0, 280, 100, 700], "surface_type": "wall", "family": ["wood"], "group": "C", "note": "wood panel strips"}
+  ],
+  "07.png": [
+    {"box": [250, 0, 1000, 1000], "surface_type": "wall", "family": ["wood"], "group": "A", "note": "close-up: walnut veneer panels with brass trim"},
+    {"box": [240, 580, 780, 1000], "surface_type": "other", "family": ["stone"], "group": "B", "note": "close-up: green marble with brass inlay"}
+  ],
+  "08.png": [
+    {"box": [0, 100, 1000, 880], "surface_type": "wall", "family": ["paint", "plaster"], "group": "A", "note": "warm beige walls and arches"},
+    {"box": [0, 0, 900, 180], "surface_type": "ceiling", "family": ["paint"], "group": "B", "note": "white ceiling with cornice"},
+    {"box": [260, 770, 790, 1000], "surface_type": "island", "family": ["stone"], "group": "C", "note": "beige/brown onyx marble island"},
+    {"box": [0, 580, 150, 730], "surface_type": "backsplash", "family": ["stone"], "group": "D", "note": "brown marble backsplash"}
+  ],
+  "09.png": [
+    {"box": [100, 220, 210, 730], "surface_type": "column", "family": ["paint", "plaster"], "group": "A", "note": "white panelled column"},
+    {"box": [430, 320, 500, 750], "surface_type": "column", "family": ["paint", "plaster"], "group": "A", "note": "white panelled column"},
+    {"box": [800, 60, 935, 830], "surface_type": "column", "family": ["paint", "plaster"], "group": "A", "note": "white panelled column"},
+    {"box": [80, 720, 220, 900], "surface_type": "column", "family": ["stone"], "group": "B", "note": "granite column base"},
+    {"box": [800, 800, 930, 850], "surface_type": "column", "family": ["stone"], "group": "B", "note": "granite column base"},
+    {"box": [0, 0, 1000, 300], "surface_type": "ceiling", "family": ["wood"], "group": "C", "note": "dark wood lattice fascia"}
+  ],
+  "10.png": [
+    {"box": [70, 90, 330, 620], "surface_type": "column", "family": ["wood"], "group": "A", "note": "walnut column"},
+    {"box": [470, 200, 1000, 460], "surface_type": "wall", "family": ["wood"], "group": "B", "note": "dark fluted wood slats"},
+    {"box": [520, 460, 1000, 630], "surface_type": "backsplash", "family": ["tile"], "group": "C", "note": "sage green glossy zellige tiles"},
+    {"box": [100, 680, 640, 1000], "surface_type": "island", "family": ["tile"], "group": "C", "note": "same green tiles on island front"}
+  ],
+  "11.png": [
+    {"box": [60, 40, 820, 760], "surface_type": "column", "family": ["wood"], "group": "A", "note": "dark oak columns and arches"},
+    {"box": [0, 700, 860, 1000], "surface_type": "counter_front", "family": ["tile"], "group": "B", "note": "teal vertical stacked tiles on reception counter"}
+  ]
+}
