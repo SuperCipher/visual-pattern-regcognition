@@ -67,9 +67,14 @@ uv run --extra ml experiments/match_projects.py  # match portfolio photos, write
 | `catalog/build_index.py` | Swatch embeddings + main colour per decor, one index per embedding model |
 | `matcher/` | Colour (CIELAB, lighting correction), embedders (colour histogram, DINOv2, CLIP) and ranking |
 | `experiments/match_projects.py` | Checks the decors each portfolio project names show up in the top 5 for its photos |
+| `experiments/export_review.py` | Bundles a matching run with thumbnails into `experiments/out/review_data.json` for the visual review page |
 
 Ranking: the vision model's material family picks the decor category (wood → woodgrain,
-stone → stone, paint/plaster → solid colour, ...). Within it, decors are scored by image
-similarity minus a colour-distance penalty, which dominates for solid colours.
+stone → stone, paint/plaster → solid colour, ...). Decors are scored by image similarity
+(swatch embedded whole and as four quadrants, averaged) minus a colour-distance penalty, which
+dominates for solid colours. In `auto` mode the category is a hard filter for families the
+vision model labels reliably (wood, metal, paint) and only a head start for plaster, which it
+also uses for glossy marble. `auto-hub` also lowers "hub" decors that sit close to almost any
+wall crop (CSLS-style correction), so a few decors stop crowding every top 5.
 
 Tests: `uv run --extra ml python -m unittest matcher/test_matcher.py catalog/test_scrape_site.py experiments/test_scripts.py`

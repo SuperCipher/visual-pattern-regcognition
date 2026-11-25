@@ -18,13 +18,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "experiments"))
 
+from dataclasses import replace
+
 import match_projects as mp
 import run_vlm
 
 from catalog import build_index
 from matcher.colour import delta_e, gray_world, main_lab, srgb_to_lab
 from matcher.embed import ColourHistEmbedder
-from matcher.rank import CatalogIndex, rank
+from matcher.rank import CatalogIndex, hub_scores, rank
 
 
 def solid(rgb: tuple[int, int, int], size: int = 80) -> Image.Image:
@@ -106,6 +108,27 @@ class RankTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.rank_colour((0, 0, 0), "wood", category_mode="maybe")
 
+    def test_auto_mode_is_hard_for_reliable_families_and_soft_for_plaster(self) -> None:
+        wood_coloured = (150, 100, 60)
+        auto_paint = self.rank_colour(wood_coloured, "paint", category_mode="auto", k=10)
+        self.assertEqual([m.category for m in auto_paint], ["solid_colour", "solid_colour"])
+        auto_plaster = self.rank_colour(wood_coloured, "plaster", category_mode="auto", k=10)
+        self.assertEqual(auto_plaster[0].code, "W-1")  # soft: a clear wood match still wins
+
+    def test_hub_scores_pick_the_decor_closest_to_every_crop(self) -> None:
+        decors = np.array([[1.0, 0.0], [0.0, 1.0], [0.7071, 0.7071]])
+        crops = np.array([[1.0, 0.0], [0.0, 1.0], [0.6, 0.8], [0.8, 0.6]])
+        hub = hub_scores(decors, crops, k=4)
+        self.assertEqual(int(np.argmax(hub)), 2)
+
+    def test_hub_weight_demotes_a_hub(self) -> None:
+        hub = np.array([5.0 if c == "W-1" else 0.0 for c in self.index.codes], np.float32)  # sheet + flip
+        index = replace(self.index, hub=hub)
+        img = solid((150, 100, 60))
+        args = (index, self.emb.embed([img])[0], main_lab(img), "wood")
+        self.assertEqual(rank(*args, category_mode="hard")[0].code, "W-1")
+        self.assertEqual(rank(*args, category_mode="hard", hub_weight=0.5)[0].code, "W-2")
+
     def test_unknown_family_falls_back_to_whole_catalog(self) -> None:
         self.assertEqual(len(self.rank_colour((0, 0, 0), "mosaic", k=10)), 4)
 
@@ -114,6 +137,10 @@ class RankTests(unittest.TestCase):
             path = Path(tmp) / "i.npz"
             self.index.save(path)
             loaded = CatalogIndex.load(path)
+            replace(self.index, hub=np.ones(5, np.float32)).save(path)
+            with_hub = CatalogIndex.load(path)
+        self.assertIsNone(loaded.hub)
+        np.testing.assert_allclose(with_hub.hub, np.ones(5))
         self.assertEqual(loaded.codes, self.index.codes)
         np.testing.assert_allclose(loaded.embeddings, self.index.embeddings)
 
@@ -155,6 +182,9 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(tops[0].box, (0, 0, 500, 1000))
         self.assertEqual(len(tops[0].scores), len(tops[0].codes))
         self.assertEqual(len(mp.match_photo(img, surfaces, emb, index, "whole-photo", 5)), 1)
+        self.assertEqual(
+            [t.codes[0] for t in mp.match_photo(img, surfaces, emb, index, "auto-hub", 5)], ["W-1", "S-1"]
+        )
 
     def test_metrics(self) -> None:
         box = (0, 0, 1000, 1000)

@@ -21,7 +21,10 @@ Named decors that are not in the scraped catalog can never match, so they are le
 decor recall and listed under the table.
 Modes:
   hard            VLM boxes, only decors in the category mapped from the material family
-  soft            VLM boxes, all decors, with a bonus for that category (the planned app)
+  soft            VLM boxes, all decors, with a bonus for that category
+  auto            hard for families the vision model labels reliably, soft for plaster
+  auto-hub        auto, minus a share of each decor's hub score (decors that match every crop).
+                  Hub scores come from all VLM crops in this run; they use no labels.
   no-category     VLM boxes, ranking over the whole catalog
   whole-photo     no VLM, the full photo as one surface (baseline)
 """
@@ -33,9 +36,10 @@ import json
 import os
 import sys
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,13 +51,22 @@ import run_vlm
 from catalog.build_index import slug
 from matcher.colour import main_lab
 from matcher.embed import load_embedder
-from matcher.rank import CatalogIndex, rank
+from matcher.rank import HUB_WEIGHT, CatalogIndex, hub_scores, rank
 
 CATALOG = ROOT / "catalog"
 OUT = ROOT / "experiments" / "out" / "projects"
 VLM = "qwen/qwen3-vl-235b-a22b-instruct"
-MODES = ("hard", "soft", "no-category", "whole-photo")
-CATEGORY_MODE = {"hard": "hard", "soft": "soft", "no-category": "off", "whole-photo": "off"}
+MODES = ("hard", "soft", "auto", "auto-hub", "no-category", "whole-photo")
+CATEGORY_MODE = {
+    "hard": "hard",
+    "soft": "soft",
+    "auto": "auto",
+    "auto-hub": "auto",
+    "no-category": "off",
+    "whole-photo": "off",
+}
+HUB_MODES = {"auto-hub"}
+WHOLE = (0.0, 0.0, 1000.0, 1000.0)
 MIN_BOX_SIDE = 40  # ignore slivers narrower than this many pixels
 
 
@@ -172,26 +185,40 @@ def surfaces_for(photo: Path, project: int, prompt: str, key: str | None) -> lis
     return res.surfaces
 
 
-def match_photo(
-    img: Image.Image, surfaces: list[run_vlm.Surface], embedder, index: CatalogIndex, mode: str, k: int
-) -> tuple[SurfaceMatch, ...]:
-    if mode == "whole-photo":
-        regions = [(None, (0.0, 0.0, 1000.0, 1000.0), img)]
+Region = tuple[str, tuple[float, ...], np.ndarray, np.ndarray]  # family, box, embedding, Lab colour
+
+
+def embed_regions(img: Image.Image, surfaces: list[run_vlm.Surface], embedder, whole: bool) -> list[Region]:
+    """Embed each usable surface crop (or the whole photo) once, for every mode to reuse."""
+    if whole:
+        crops = [("", WHOLE, img)]
     else:
-        regions = [(s.family, s.box, c) for s in surfaces if (c := crop(img, s.box)) is not None]
-    if not regions:
-        return ()
-    embs = embedder.embed([c for _, _, c in regions])
+        crops = [(s.family or "", tuple(s.box), c) for s in surfaces if (c := crop(img, s.box)) is not None]
+    if not crops:
+        return []
+    embs = embedder.embed([c for _, _, c in crops])
+    return [(f, b, e, main_lab(c, correct_lighting=True)) for (f, b, c), e in zip(crops, embs, strict=True)]
+
+
+def rank_regions(regions: list[Region], index: CatalogIndex, mode: str, k: int) -> tuple[SurfaceMatch, ...]:
+    hub_weight = HUB_WEIGHT if mode in HUB_MODES else 0.0
     out = []
-    for (family, box, c), emb in zip(regions, embs, strict=True):
-        lab = main_lab(c, correct_lighting=True)
-        top = rank(index, emb, lab, family, k=k, category_mode=CATEGORY_MODE[mode])
+    for family, box, emb, lab in regions:
+        top = rank(
+            index, emb, lab, family or None, k=k, category_mode=CATEGORY_MODE[mode], hub_weight=hub_weight
+        )
         out.append(
             SurfaceMatch(
-                family or "", tuple(box), tuple(m.code for m in top), tuple(round(m.score, 4) for m in top)
+                family, tuple(box), tuple(m.code for m in top), tuple(round(m.score, 4) for m in top)
             )
         )
     return tuple(out)
+
+
+def match_photo(
+    img: Image.Image, surfaces: list[run_vlm.Surface], embedder, index: CatalogIndex, mode: str, k: int
+) -> tuple[SurfaceMatch, ...]:
+    return rank_regions(embed_regions(img, surfaces, embedder, mode == "whole-photo"), index, mode, k)
 
 
 def main() -> int:
@@ -227,12 +254,18 @@ def main() -> int:
         n_codes = len(set(index.codes))
         known = set(index.codes)
         embedder = load_embedder(index.model)
-        for pr, ph in photos:
+        regions = {}
+        for _, ph in photos:
             img = Image.open(ph).convert("RGB")
+            regions[ph] = {w: embed_regions(img, surfaces[ph], embedder, w) for w in (False, True)}
+        crops = [e for r in regions.values() for _, _, e, _ in r[False]]
+        if crops:
+            index = replace(index, hub=hub_scores(index.embeddings, np.stack(crops)))
+        for pr, ph in photos:
+            expected = tuple(c for c in pr["decor_codes"] if c in known)
+            not_in_catalog |= set(pr["decor_codes"]) - known
             for mode in MODES:
-                tops = match_photo(img, surfaces[ph], embedder, index, mode, args.k)
-                expected = tuple(c for c in pr["decor_codes"] if c in known)
-                not_in_catalog |= set(pr["decor_codes"]) - known
+                tops = rank_regions(regions[ph][mode == "whole-photo"], index, mode, args.k)
                 results.append(PhotoResult(pr["id"], ph.name, index.model, mode, expected, tops))
         print(f"matched with {index.model}")
 
