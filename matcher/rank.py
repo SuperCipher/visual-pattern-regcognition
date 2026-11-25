@@ -61,23 +61,37 @@ class Match:
     score: float
 
 
+SOFT_CATEGORY_BONUS = 0.1  # "soft" mode: decors in the detected family's category get this head start
+
+
 def rank(
     index: CatalogIndex,
     embedding: np.ndarray,
     lab: np.ndarray,
     family: str | None,
     k: int = 5,
-    use_category: bool = True,
+    category_mode: str = "soft",
 ) -> list[Match]:
-    """Top-k distinct decor codes for one surface (a flip sheet never shows twice)."""
-    category = FAMILY_TO_CATEGORY.get(family or "")
+    """Top-k distinct decor codes for one surface (a flip sheet never shows twice).
+
+    category_mode:
+      "hard"  only decors in the category mapped from the material family
+      "soft"  every decor, with a bonus for that category, so a mislabelled family (glossy
+              marble called "plaster") can still surface the right decor
+      "off"   ignore the family
+    Each decor's colour penalty uses its own category's weight (solid colours lean on colour).
+    """
+    if category_mode not in {"hard", "soft", "off"}:
+        raise ValueError(f"unknown category_mode {category_mode!r}")
+    category = FAMILY_TO_CATEGORY.get(family or "") if category_mode != "off" else None
     cats = np.array(index.categories)
-    mask = cats == category if (use_category and category) else np.ones(len(cats), bool)
-    if not mask.any():
-        mask[:] = True
-    weight = COLOUR_WEIGHT.get(category or "", DEFAULT_COLOUR_WEIGHT)
-    score = index.embeddings @ embedding - weight * delta_e(index.labs, lab) / DELTA_E_SCALE
-    score = np.where(mask, score, -np.inf)
+    in_cat = cats == category if category else np.zeros(len(cats), bool)
+    weights = np.array([COLOUR_WEIGHT.get(c, DEFAULT_COLOUR_WEIGHT) for c in index.categories])
+    score = index.embeddings @ embedding - weights * delta_e(index.labs, lab) / DELTA_E_SCALE
+    if category_mode == "soft":
+        score = score + SOFT_CATEGORY_BONUS * in_cat
+    elif category_mode == "hard" and in_cat.any():
+        score = np.where(in_cat, score, -np.inf)
 
     out: list[Match] = []
     for i in np.argsort(-score):

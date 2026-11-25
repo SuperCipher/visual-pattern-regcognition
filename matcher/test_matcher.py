@@ -77,17 +77,34 @@ class RankTests(unittest.TestCase):
         return rank(self.index, self.emb.embed([img])[0], main_lab(img), family, **kw)
 
     def test_paint_maps_to_solid_colours_and_ranks_by_colour(self) -> None:
-        top = self.rank_colour((190, 50, 50), "paint")
+        top = self.rank_colour((190, 50, 50), "paint", category_mode="hard")
         self.assertEqual([m.code for m in top], ["S-1", "S-2"])
 
     def test_flip_sheet_never_listed_twice(self) -> None:
-        codes = [m.code for m in self.rank_colour((150, 100, 60), "wood")]
+        codes = [m.code for m in self.rank_colour((150, 100, 60), "wood", category_mode="hard")]
         self.assertEqual(codes, ["W-1", "W-2"])
 
     def test_without_category_searches_everything(self) -> None:
-        top = self.rank_colour((150, 100, 60), "paint", use_category=False, k=10)
+        top = self.rank_colour((150, 100, 60), "paint", category_mode="off", k=10)
         self.assertEqual(top[0].code, "W-1")
         self.assertEqual(len(top), 4)
+
+    def test_soft_category_lets_a_clear_match_from_another_category_win(self) -> None:
+        # A wood-coloured surface the vision model mislabelled as paint.
+        self.assertEqual(self.rank_colour((150, 100, 60), "paint", category_mode="hard")[0].code, "S-1")
+        soft = self.rank_colour((150, 100, 60), "paint", category_mode="soft", k=10)
+        self.assertEqual(soft[0].code, "W-1")
+        self.assertEqual(len(soft), 4)
+
+    def test_soft_category_breaks_near_ties_toward_the_family(self) -> None:
+        off = self.rank_colour((120, 70, 120), "paint", category_mode="off", k=10)
+        soft = self.rank_colour((120, 70, 120), "paint", category_mode="soft", k=10)
+        rank_of = lambda top, code: [m.code for m in top].index(code)
+        self.assertLessEqual(rank_of(soft, "S-1"), rank_of(off, "S-1"))
+
+    def test_unknown_category_mode_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.rank_colour((0, 0, 0), "wood", category_mode="maybe")
 
     def test_unknown_family_falls_back_to_whole_catalog(self) -> None:
         self.assertEqual(len(self.rank_colour((0, 0, 0), "mosaic", k=10)), 4)
@@ -118,6 +135,11 @@ class PipelineTests(unittest.TestCase):
             index = build_index.build(loaded, cat, "colorhist")
         self.assertEqual(index.codes, ["BBD-1"])  # missing image skipped
         self.assertEqual(index.embeddings.shape, (1, 64))
+        np.testing.assert_allclose(np.linalg.norm(index.embeddings, axis=1), 1.0, rtol=1e-5)
+
+    def test_tiles_are_whole_plus_four_quadrants(self) -> None:
+        views = build_index.tiles(solid((0, 0, 0), 100))
+        self.assertEqual([v.size for v in views], [(100, 100)] + [(50, 50)] * 4)
 
     def test_match_photo_modes(self) -> None:
         img = Image.new("RGB", (1000, 1000), (150, 100, 60))
@@ -128,18 +150,27 @@ class PipelineTests(unittest.TestCase):
             run_vlm.Surface((0, 0, 10, 10), "wall", "wood", "", "", "C", 0.9),  # too small, dropped
         ]
         index, emb = toy_index(), ColourHistEmbedder()
-        tops = mp.match_photo(img, surfaces, emb, index, "surfaces", 5)
-        self.assertEqual([(f, t[0]) for f, t in tops], [("wood", "W-1"), ("paint", "S-1")])
+        tops = mp.match_photo(img, surfaces, emb, index, "hard", 5)
+        self.assertEqual([(t.family, t.codes[0]) for t in tops], [("wood", "W-1"), ("paint", "S-1")])
+        self.assertEqual(tops[0].box, (0, 0, 500, 1000))
+        self.assertEqual(len(tops[0].scores), len(tops[0].codes))
         self.assertEqual(len(mp.match_photo(img, surfaces, emb, index, "whole-photo", 5)), 1)
 
     def test_metrics(self) -> None:
-        r1 = mp.PhotoResult(1, "a.jpg", "m", "surfaces", ("X",), (("wood", ("Y", "X")),))
-        r2 = mp.PhotoResult(1, "b.jpg", "m", "surfaces", ("X",), (("wood", ("Y", "Z")),))
+        box = (0, 0, 1000, 1000)
+        r1 = mp.PhotoResult(
+            1, "a.jpg", "m", "soft", ("X",), (mp.SurfaceMatch("wood", box, ("Y", "X"), (0.9, 0.8)),)
+        )
+        r2 = mp.PhotoResult(
+            1, "b.jpg", "m", "soft", ("X",), (mp.SurfaceMatch("wood", box, ("Y", "Z"), (0.9, 0.8)),)
+        )
+        r3 = mp.PhotoResult(2, "c.jpg", "m", "soft", (), ())  # project whose decor isn't in the catalog
         self.assertTrue(mp.hit(r1, 5))
         self.assertFalse(mp.hit(r1, 1))
-        rows = mp.summarise([r1, r2], n_codes=100)
+        rows = mp.summarise([r1, r2, r3], n_codes=100)
         self.assertEqual((rows[0]["recall@5"], rows[0]["hit@5"], rows[0]["recall@1"]), (1.0, 0.5, 0.0))
         self.assertAlmostEqual(mp.chance_hit(1, 1, 100, 5), 0.05)
+        self.assertIn("BBS-3200", mp.render(rows, 2, 100, ["BBS-3200"]))
 
 
 try:

@@ -22,11 +22,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from matcher.colour import main_lab
-from matcher.embed import load_embedder
+from matcher.embed import l2_normalise, load_embedder
 from matcher.rank import CatalogIndex
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_MODELS = ["colorhist", "facebook/dinov2-small", "openai/clip-vit-base-patch32"]
+DEFAULT_MODELS = [
+    "colorhist",
+    "facebook/dinov2-small",
+    "facebook/dinov2-base",
+    "google/siglip-base-patch16-224",
+    "openai/clip-vit-base-patch32",
+]
 
 
 def slug(name: str) -> str:
@@ -42,6 +48,17 @@ def swatch(path: Path) -> Image.Image:
     return img.crop((left, top, left + side, top + side))
 
 
+def tiles(img: Image.Image) -> list[Image.Image]:
+    """The swatch plus its four quadrants.
+
+    A full swatch shows a whole sheet, while a wall in a room photo often shows a smaller patch
+    at a different scale. Averaging the views makes the swatch embedding less scale-sensitive.
+    """
+    w, h = img.size
+    quads = [(0, 0, w // 2, h // 2), (w // 2, 0, w, h // 2), (0, h // 2, w // 2, h), (w // 2, h // 2, w, h)]
+    return [img, *(img.crop(q) for q in quads)]
+
+
 def load_products(catalog_dir: Path) -> list[dict]:
     products = json.loads((catalog_dir / "products.json").read_text())
     present = [p for p in products if (catalog_dir / p["image_file"]).exists()]
@@ -50,15 +67,20 @@ def load_products(catalog_dir: Path) -> list[dict]:
     return present
 
 
-def build(products: list[dict], catalog_dir: Path, model: str) -> CatalogIndex:
+def build(products: list[dict], catalog_dir: Path, model: str, multi_scale: bool = True) -> CatalogIndex:
     images = [swatch(catalog_dir / p["image_file"]) for p in products]
     embedder = load_embedder(model)
+    if multi_scale:
+        views = embedder.embed([v for im in images for v in tiles(im)])
+        embeddings = l2_normalise(views.reshape(len(images), 5, -1).mean(axis=1))
+    else:
+        embeddings = embedder.embed(images)
     return CatalogIndex(
         codes=[p["code"] for p in products],
         variants=[p.get("variant", "") for p in products],
         names=[p["name"] for p in products],
         categories=[p["decor_category"] for p in products],
-        embeddings=embedder.embed(images).astype(np.float32),
+        embeddings=embeddings.astype(np.float32),
         labs=np.stack([main_lab(im) for im in images]).astype(np.float32),
         model=model,
     )
@@ -68,11 +90,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--models", default=",".join(DEFAULT_MODELS))
     ap.add_argument("--catalog", type=Path, default=HERE)
+    ap.add_argument("--single-scale", action="store_true", help="embed the whole swatch only (no quadrants)")
     args = ap.parse_args()
 
     products = load_products(args.catalog)
     for model in [m.strip() for m in args.models.split(",") if m.strip()]:
-        index = build(products, args.catalog, model)
+        index = build(products, args.catalog, model, multi_scale=not args.single_scale)
         dest = args.catalog / "index" / f"{slug(model)}.npz"
         index.save(dest)
         print(f"{model}: {len(index.codes)} swatches, dim {index.embeddings.shape[1]} -> {dest}")

@@ -17,8 +17,11 @@ Metrics, per embedding model and mode:
                   photo of that project
   photo hit@k     share of photos where some named decor is in the top-k of some surface
   chance          photo hit@k a random ranking would get with the same number of surfaces
+Named decors that are not in the scraped catalog can never match, so they are left out of
+decor recall and listed under the table.
 Modes:
-  surfaces        VLM boxes, category filter from the material family (the planned app)
+  hard            VLM boxes, only decors in the category mapped from the material family
+  soft            VLM boxes, all decors, with a bonus for that category (the planned app)
   no-category     VLM boxes, ranking over the whole catalog
   whole-photo     no VLM, the full photo as one surface (baseline)
 """
@@ -49,8 +52,17 @@ from matcher.rank import CatalogIndex, rank
 CATALOG = ROOT / "catalog"
 OUT = ROOT / "experiments" / "out" / "projects"
 VLM = "qwen/qwen3-vl-235b-a22b-instruct"
-MODES = ("surfaces", "no-category", "whole-photo")
+MODES = ("hard", "soft", "no-category", "whole-photo")
+CATEGORY_MODE = {"hard": "hard", "soft": "soft", "no-category": "off", "whole-photo": "off"}
 MIN_BOX_SIDE = 40  # ignore slivers narrower than this many pixels
+
+
+@dataclass(frozen=True)
+class SurfaceMatch:
+    family: str
+    box: tuple[float, float, float, float]  # 0-1000 normalised
+    codes: tuple[str, ...]  # top-k decor codes, best first
+    scores: tuple[float, ...]
 
 
 @dataclass(frozen=True)
@@ -59,8 +71,8 @@ class PhotoResult:
     photo: str
     model: str
     mode: str
-    expected: tuple[str, ...]
-    surfaces: tuple[tuple[str, tuple[str, ...]], ...]  # (family, top-k codes) per surface
+    expected: tuple[str, ...]  # named on the project page and present in the catalog
+    surfaces: tuple[SurfaceMatch, ...]
 
 
 # ---------------------------------------------------------------- pure helpers
@@ -77,11 +89,11 @@ def crop(img: Image.Image, box: Iterable[float]) -> Image.Image | None:
 
 
 def hit(result: PhotoResult, k: int) -> bool:
-    return any(code in result.expected for _, top in result.surfaces for code in top[:k])
+    return any(code in result.expected for s in result.surfaces for code in s.codes[:k])
 
 
 def found_codes(results: list[PhotoResult], k: int) -> set[tuple[int, str]]:
-    return {(r.project, c) for r in results for _, top in r.surfaces for c in top[:k] if c in r.expected}
+    return {(r.project, c) for r in results for s in r.surfaces for c in s.codes[:k] if c in r.expected}
 
 
 def chance_hit(n_surfaces: int, n_expected: int, n_codes: int, k: int) -> float:
@@ -96,7 +108,7 @@ def summarise(results: list[PhotoResult], n_codes: int) -> list[dict]:
     rows = []
     for model in sorted({r.model for r in results}):
         for mode in MODES:
-            rs = [r for r in results if r.model == model and r.mode == mode]
+            rs = [r for r in results if r.model == model and r.mode == mode and r.expected]
             if not rs:
                 continue
             pairs = {(r.project, c) for r in rs for c in r.expected}
@@ -116,7 +128,7 @@ def summarise(results: list[PhotoResult], n_codes: int) -> list[dict]:
     return rows
 
 
-def render(rows: list[dict], n_projects: int, n_codes: int) -> str:
+def render(rows: list[dict], n_projects: int, n_codes: int, not_in_catalog: list[str] = ()) -> str:
     lines = [
         "# Step 2 results: portfolio photos vs the decors each project names",
         "",
@@ -133,6 +145,11 @@ def render(rows: list[dict], n_projects: int, n_codes: int) -> str:
         f"| {r['hit@5']:.0%} | {r['chance@5']:.0%} |"
         for r in rows
     ]
+    if not_in_catalog:
+        lines += [
+            "",
+            f"Named on project pages but not in the catalog (excluded): {', '.join(not_in_catalog)}",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -157,20 +174,23 @@ def surfaces_for(photo: Path, project: int, prompt: str, key: str | None) -> lis
 
 def match_photo(
     img: Image.Image, surfaces: list[run_vlm.Surface], embedder, index: CatalogIndex, mode: str, k: int
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
+) -> tuple[SurfaceMatch, ...]:
     if mode == "whole-photo":
-        regions = [(None, img)]
+        regions = [(None, (0.0, 0.0, 1000.0, 1000.0), img)]
     else:
-        regions = [(s.family, c) for s in surfaces if (c := crop(img, s.box)) is not None]
+        regions = [(s.family, s.box, c) for s in surfaces if (c := crop(img, s.box)) is not None]
     if not regions:
         return ()
-    embs = embedder.embed([c for _, c in regions])
+    embs = embedder.embed([c for _, _, c in regions])
     out = []
-    for (family, c), emb in zip(regions, embs, strict=True):
-        top = rank(
-            index, emb, main_lab(c, correct_lighting=True), family, k=k, use_category=mode == "surfaces"
+    for (family, box, c), emb in zip(regions, embs, strict=True):
+        lab = main_lab(c, correct_lighting=True)
+        top = rank(index, emb, lab, family, k=k, category_mode=CATEGORY_MODE[mode])
+        out.append(
+            SurfaceMatch(
+                family or "", tuple(box), tuple(m.code for m in top), tuple(round(m.score, 4) for m in top)
+            )
         )
-        out.append((family or "", tuple(m.code for m in top)))
     return tuple(out)
 
 
@@ -201,22 +221,24 @@ def main() -> int:
 
     results: list[PhotoResult] = []
     n_codes = 0
+    not_in_catalog: set[str] = set()
     for f in index_files:
         index = CatalogIndex.load(f)
         n_codes = len(set(index.codes))
+        known = set(index.codes)
         embedder = load_embedder(index.model)
         for pr, ph in photos:
             img = Image.open(ph).convert("RGB")
             for mode in MODES:
                 tops = match_photo(img, surfaces[ph], embedder, index, mode, args.k)
-                results.append(
-                    PhotoResult(pr["id"], ph.name, index.model, mode, tuple(pr["decor_codes"]), tops)
-                )
+                expected = tuple(c for c in pr["decor_codes"] if c in known)
+                not_in_catalog |= set(pr["decor_codes"]) - known
+                results.append(PhotoResult(pr["id"], ph.name, index.model, mode, expected, tops))
         print(f"matched with {index.model}")
 
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "matches.json").write_text(json.dumps([asdict(r) for r in results], indent=1))
-    report = render(summarise(results, n_codes), len(projects), n_codes)
+    report = render(summarise(results, n_codes), len(projects), n_codes, sorted(not_in_catalog))
     args.report.write_text(report)
     print(report)
     return 0
