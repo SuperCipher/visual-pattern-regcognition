@@ -11,3 +11,8 @@ catalog/images/
 catalog/projects/
 catalog/*.pdf
 catalog/index/
+
+# web app
+web/node_modules/
+web/dist/
+web/public/catalog/

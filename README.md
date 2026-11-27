@@ -78,3 +78,28 @@ also uses for glossy marble. `auto-hub` also lowers "hub" decors that sit close 
 wall crop (CSLS-style correction), so a few decors stop crowding every top 5.
 
 Tests: `uv run --extra ml python -m unittest matcher/test_matcher.py catalog/test_scrape_site.py experiments/test_scripts.py`
+
+## Step 3: web app (in progress)
+
+Plan: a static site on Cloudflare Pages. A small Worker hides the OpenRouter key and asks
+Qwen3-VL for the surfaces; the browser embeds each crop with SigLIP (transformers.js) and ranks
+the catalog itself. Node, pnpm and wrangler come from the flake dev shell.
+
+The browser and the catalog must use the same model weights, so the catalog index for the web
+is built with the ONNX file the browser downloads (the `onnx:` embedder runs it with onnxruntime):
+
+```bash
+uv run --extra ml catalog/build_index.py --models onnx:Xenova/siglip-base-patch16-224:quantized
+uv run --extra ml experiments/match_projects.py --models onnx:Xenova/siglip-base-patch16-224:quantized
+uv run catalog/export_web.py      # -> web/public/catalog/ (decors.json, embeddings.bin, swatches/)
+```
+
+| Path | What it does |
+|---|---|
+| `catalog/export_web.py` | Writes one index as static files for the web app |
+| `web/src/match/` | TypeScript port of colour, ranking (auto mode) and same-material grouping |
+| `experiments/make_web_fixtures.py` | Regenerates the fixtures that make the TypeScript tests match Python |
+
+Web tests and lint: `cd web && pnpm install && pnpm test && pnpm lint`. If you change
+`matcher/colour.py` or `matcher/rank.py`, run `uv run experiments/make_web_fixtures.py` and port
+the change to `web/src/match/`.

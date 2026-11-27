@@ -1,5 +1,5 @@
 {
-  description = "visual-pattern-recognition: dev shell for the step 1 model test";
+  description = "visual-pattern-recognition: dev shell (Python experiments + web app)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -11,7 +11,8 @@
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           # uv runs the scripts with their inline dependencies (PEP 723), so no pip installs.
-          packages = [ pkgs.python313 pkgs.uv pkgs.ruff ];
+          # Node + pnpm build and test the web app (web/); wrangler deploys it to Cloudflare.
+          packages = [ pkgs.python313 pkgs.uv pkgs.ruff pkgs.nodejs_22 pkgs.pnpm pkgs.wrangler ];
         };
       });
     };

@@ -164,6 +164,31 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(index.embeddings.shape, (1, 64))
         np.testing.assert_allclose(np.linalg.norm(index.embeddings, axis=1), 1.0, rtol=1e-5)
 
+    def test_export_web_writes_float16_rows_in_catalog_order(self) -> None:
+        from catalog import export_web
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cat = Path(tmp)
+            (cat / "images").mkdir()
+            products = []
+            for i, rgb in enumerate([(10, 200, 10), (200, 10, 10)]):
+                solid(rgb, 200).save(cat / "images" / f"BBD-{i}.jpg")
+                products.append({"code": f"BBD-{i}", "variant": "", "name": f"D{i}", "url": "https://x/",
+                                 "decor_category": "solid_colour", "image_file": f"images/BBD-{i}.jpg"})  # fmt: skip
+            index = build_index.build(products, cat, "colorhist")
+            doc = export_web.export(index, products, cat, cat / "web")
+            rows = np.fromfile(cat / "web" / "embeddings.bin", dtype="<f2").reshape(2, -1)
+            self.assertTrue((cat / "web" / doc["decors"][1]["swatch"]).exists())
+        self.assertEqual([d["code"] for d in doc["decors"]], ["BBD-0", "BBD-1"])
+        np.testing.assert_allclose(rows, index.embeddings, atol=1e-3)
+
+    def test_preprocess_matches_siglip_normalisation(self) -> None:
+        from matcher.embed import preprocess
+
+        px = preprocess(solid((255, 0, 128), 50), (224, 224), [0.5] * 3, [0.5] * 3, 1 / 255)
+        self.assertEqual(px.shape, (3, 224, 224))
+        np.testing.assert_allclose(px[:, 0, 0], [1.0, -1.0, 128 / 255 * 2 - 1], atol=1e-5)
+
     def test_tiles_are_whole_plus_four_quadrants(self) -> None:
         views = build_index.tiles(solid((0, 0, 0), 100))
         self.assertEqual([v.size for v in views], [(100, 100)] + [(50, 50)] * 4)
