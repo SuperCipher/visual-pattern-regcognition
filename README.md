@@ -81,7 +81,7 @@ Tests: `uv run --extra ml python -m unittest matcher/test_matcher.py catalog/tes
 
 ## Step 3: web app (in progress)
 
-Plan: a static site on Cloudflare Pages. A small Worker hides the OpenRouter key and asks
+A static site served by a Cloudflare Worker. The Worker hides the OpenRouter key and asks
 Qwen3-VL for the surfaces; the browser embeds each crop with SigLIP (transformers.js) and ranks
 the catalog itself. Node, pnpm and wrangler come from the flake dev shell.
 
@@ -99,6 +99,24 @@ uv run catalog/export_web.py      # -> web/public/catalog/ (decors.json, embeddi
 | `catalog/export_web.py` | Writes one index as static files for the web app |
 | `web/src/match/` | TypeScript port of colour, ranking (auto mode) and same-material grouping |
 | `experiments/make_web_fixtures.py` | Regenerates the fixtures that make the TypeScript tests match Python |
+
+Run and deploy (from `web/`, inside `nix develop`):
+
+```bash
+pnpm install
+pnpm test && pnpm lint
+pnpm dev                       # UI only; add ?mock to replay the example without API calls
+cp .dev.vars.example .dev.vars # then put your OpenRouter key in it (gitignored)
+pnpm dev:worker                # site + /api/surfaces on http://localhost:8787
+wrangler login                 # once
+wrangler secret put OPENROUTER_API_KEY
+wrangler secret put TURNSTILE_SECRET   # and set VITE_TURNSTILE_SITE_KEY when building
+pnpm deploy
+```
+
+One Worker serves both the static site (`web/dist`) and `/api/surfaces`, so there is no CORS and
+one deploy. Abuse limits: Turnstile, 10 requests per minute per IP, a 2 MB image cap, and the
+credit limit you set on the OpenRouter key.
 
 Web tests and lint: `cd web && pnpm install && pnpm test && pnpm lint`. If you change
 `matcher/colour.py` or `matcher/rank.py`, run `uv run experiments/make_web_fixtures.py` and port

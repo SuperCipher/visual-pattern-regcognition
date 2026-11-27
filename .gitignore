@@ -17,3 +17,5 @@ web/node_modules/
 web/dist/
 web/public/catalog/
 web/public/mock/
+web/.dev.vars
+web/.wrangler/

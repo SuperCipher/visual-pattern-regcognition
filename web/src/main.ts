@@ -1,6 +1,6 @@
 /**
  * Blackbone Decor Finder: upload -> processing -> results.
- * Phase B: the pipeline is runMock(); phase C swaps in the real one with the same interface.
+ * Uploads run the real pipeline; "Try an example" (and ?mock) replays a saved result at no API cost.
  */
 
 import "./style.css";
@@ -13,7 +13,7 @@ type View =
   | { kind: "upload" }
   | { kind: "processing"; photo: string; progress: Progress }
   | { kind: "results"; result: PipelineResult }
-  | { kind: "error" };
+  | { kind: "error"; code: string };
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let lang: Lang = detectLang();
@@ -21,6 +21,9 @@ let view: View = { kind: "upload" };
 /** Which alternative is featured per group (index into its matches). */
 let featured: number[] = [];
 let litGroup: number | null = null;
+/** ?mock: uploads also replay the saved example (layout work without API calls). */
+const MOCK = new URLSearchParams(location.search).has("mock");
+let hasExample = false;
 
 const t = () => STRINGS[lang];
 const esc = (s: unknown) =>
@@ -51,13 +54,13 @@ function uploadView(): string {
       <div class="actions">
         <label class="btn primary" for="file">${esc(s.choose)}</label>
         <label class="btn" for="camera">${esc(s.takePhoto)}</label>
-        <button class="btn" type="button" id="example">${esc(s.example)}</button>
+        ${hasExample ? `<button class="btn" type="button" id="example">${esc(s.example)}</button>` : ""}
       </div>
       <input id="file" type="file" accept="image/*" hidden />
       <input id="camera" type="file" accept="image/*" capture="environment" hidden />
       <span class="muted">${esc(s.drop)}</span>
       <p class="fine">${esc(s.tips)}<br />${esc(s.privacy)}</p>
-      <p class="note">${esc(s.previewNote)}</p>
+      ${MOCK ? `<p class="note">${esc(s.previewNote)}</p>` : ""}
     </div>
   </main>`;
 }
@@ -147,9 +150,10 @@ function resultsView(r: PipelineResult): string {
     </section></main>`;
 }
 
-function errorView(): string {
+function errorView(code: string): string {
   const s = t();
-  return `<main class="wrap error"><h2>${esc(s.errorTitle)}</h2><p class="muted">${esc(s.errorBody)}</p>
+  const body = code === "rate_limited" ? s.errorBusy : code === "bot_check_failed" ? s.errorBot : s.errorBody;
+  return `<main class="wrap error"><h2>${esc(s.errorTitle)}</h2><p class="muted">${esc(body)}</p>
     <button class="btn primary" type="button" id="again">${esc(s.again)}</button></main>`;
 }
 
@@ -162,7 +166,7 @@ function render(): void {
         ? processingView(view)
         : view.kind === "results"
           ? resultsView(view.result)
-          : errorView();
+          : errorView(view.code);
   app.innerHTML = `${header()}${body}<footer class="wrap">© Blackbone HPL · ${esc(t().privacy)}</footer>`;
 }
 
@@ -171,34 +175,38 @@ function setView(v: View): void {
   render();
 }
 
-async function start(photo: string): Promise<void> {
+async function start(photo: string, run: (p: (x: Progress) => void) => Promise<PipelineResult>): Promise<void> {
   featured = [];
   litGroup = null;
   setView({ kind: "processing", photo, progress: { step: "model", fraction: 0 } });
   try {
-    const result = await runMock((progress) => {
+    const result = await run((progress) => {
       if (view.kind === "processing") setView({ ...view, progress });
     });
-    // Phase B shows the example result; phase C shows the uploaded photo's own result.
     setView({ kind: "results", result });
   } catch (e) {
     console.error(e);
-    setView({ kind: "error" });
+    const code = (e as { code?: unknown })?.code;
+    setView({ kind: "error", code: typeof code === "string" ? code : "failed" });
   }
 }
 
 function readFile(file: File | undefined): void {
   if (!file || !file.type.startsWith("image/")) return;
-  void start(URL.createObjectURL(file));
+  const box = document.querySelector<HTMLElement>("#turnstile")!;
+  // The pipeline (and transformers.js, ~1 MB) loads only when a photo is chosen.
+  void start(URL.createObjectURL(file), async (p) =>
+    MOCK ? runMock(p) : (await import("./pipeline")).runPipeline(file, box, p),
+  );
 }
 
 async function startExample(): Promise<void> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}mock/example.json`);
     const { photo } = (await res.json()) as PipelineResult;
-    void start(photo);
+    void start(photo, runMock);
   } catch {
-    setView({ kind: "error" });
+    setView({ kind: "error", code: "failed" });
   }
 }
 
@@ -213,6 +221,12 @@ app.addEventListener("click", (e) => {
       /* storage blocked */
     }
     return render();
+fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
+  .then((r) => {
+    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
+    if (hasExample && view.kind === "upload") render();
+  })
+  .catch(() => {});
   }
   if (el.closest("#example")) return void startExample();
   if (el.closest("#again")) return setView({ kind: "upload" });
@@ -220,12 +234,24 @@ app.addEventListener("click", (e) => {
   if (alt) {
     featured[Number(alt.dataset.group)] = Number(alt.dataset.pick);
     return render();
+fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
+  .then((r) => {
+    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
+    if (hasExample && view.kind === "upload") render();
+  })
+  .catch(() => {});
   }
   const card = el.closest<HTMLElement>(".card");
   if (card && !el.closest("a")) {
     const gi = Number(card.dataset.group);
     litGroup = litGroup === gi ? null : gi;
     render();
+fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
+  .then((r) => {
+    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
+    if (hasExample && view.kind === "upload") render();
+  })
+  .catch(() => {});
   }
 });
 
@@ -245,3 +271,9 @@ app.addEventListener("drop", (e) => {
 });
 
 render();
+fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
+  .then((r) => {
+    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
+    if (hasExample && view.kind === "upload") render();
+  })
+  .catch(() => {});

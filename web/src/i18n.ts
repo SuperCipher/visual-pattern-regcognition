@@ -26,6 +26,8 @@ const en = {
   again: "Try another photo",
   errorTitle: "We couldn't read this photo",
   errorBody: "Try another photo, ideally a wider, well-lit shot of the room.",
+  errorBusy: "Too many photos in a short time. Please wait a minute and try again.",
+  errorBot: "Our bot check didn't pass. Reload the page and try again.",
   similarity: "match",
   family: {
     wood: "Wood", stone: "Stone", concrete: "Concrete", paint: "Painted", plaster: "Plaster",
@@ -58,6 +60,8 @@ const th: typeof en = {
   again: "ลองรูปอื่น",
   errorTitle: "อ่านรูปนี้ไม่ได้",
   errorBody: "ลองใช้รูปอื่น โดยเฉพาะรูปมุมกว้างที่มีแสงสว่างเพียงพอ",
+  errorBusy: "ส่งรูปถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  errorBot: "การตรวจสอบความปลอดภัยไม่ผ่าน กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง",
   similarity: "ความใกล้เคียง",
   family: {
     wood: "ไม้", stone: "หิน", concrete: "ปูนเปลือย", paint: "สีทาผนัง", plaster: "ปูนฉาบ",
