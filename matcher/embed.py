@@ -107,6 +107,8 @@ class OnnxEmbedder:
         self.session = ort.InferenceSession(
             hf_hub_download(repo, onnx_file), providers=["CPUExecutionProvider"]
         )
+        # fp16 exports may take float16 input; feed whatever the model declares.
+        self.input_dtype = np.float16 if "float16" in self.session.get_inputs()[0].type else np.float32
         outputs = [o.name for o in self.session.get_outputs()]
         self.output = "image_embeds" if "image_embeds" in outputs else "pooler_output"
 
@@ -119,7 +121,8 @@ class OnnxEmbedder:
                     for im in images[i : i + self.batch_size]
                 ]
             )
-            out.append(self.session.run([self.output], {"pixel_values": batch})[0])
+            feed = {"pixel_values": batch.astype(self.input_dtype)}
+            out.append(self.session.run([self.output], feed)[0].astype(np.float32))
         return l2_normalise(np.concatenate(out).astype(np.float32))
 
 
