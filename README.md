@@ -4,7 +4,7 @@ A self-serve web app (planned) where a client uploads an interior photo. The app
 finished surface (walls, ceilings, columns, islands, counter fronts), groups surfaces that use the
 same material, and suggests the closest products from the catalog.
 
-Status: **step 1 of 3, model test.** See [PLAN.md](PLAN.md) for the full plan.
+Status: **step 2 of 3, catalog + matching.** Step 1 chose Qwen3-VL for finding surfaces. See [PLAN.md](PLAN.md).
 
 ## Step 1: which vision model finds surfaces best?
 
@@ -51,3 +51,30 @@ uvx ruff check experiments/ && uvx ruff format --check experiments/
 - **Photos complete:** photos where every labelled material was found.
 - **Extra boxes:** predictions that overlap nothing labelled (may be valid, or noise).
 - **Latency and cost** per photo, from OpenRouter's usage data.
+
+## Step 2: catalog + matching
+
+```sh
+uv run catalog/scrape_site.py                    # products + portfolio photos from blackbone.co.th
+uv run --extra ml catalog/build_index.py         # embed every swatch -> catalog/index/*.npz
+export OPENROUTER_API_KEY=...
+uv run --extra ml experiments/match_projects.py  # match portfolio photos, writes experiments/results_step2.md
+```
+
+| Path | What it does |
+|---|---|
+| `catalog/scrape_site.py` | Products (decor code, name, category, swatch) and portfolio projects from the site's public APIs |
+| `catalog/build_index.py` | Swatch embeddings + main colour per decor, one index per embedding model |
+| `matcher/` | Colour (CIELAB, lighting correction), embedders (colour histogram, DINOv2, CLIP) and ranking |
+| `experiments/match_projects.py` | Checks the decors each portfolio project names show up in the top 5 for its photos |
+| `experiments/export_review.py` | Bundles a matching run with thumbnails into `experiments/out/review_data.json` for the visual review page |
+
+Ranking: the vision model's material family picks the decor category (wood → woodgrain,
+stone → stone, paint/plaster → solid colour, ...). Decors are scored by image similarity
+(swatch embedded whole and as four quadrants, averaged) minus a colour-distance penalty, which
+dominates for solid colours. In `auto` mode the category is a hard filter for families the
+vision model labels reliably (wood, metal, paint) and only a head start for plaster, which it
+also uses for glossy marble. `auto-hub` also lowers "hub" decors that sit close to almost any
+wall crop (CSLS-style correction), so a few decors stop crowding every top 5.
+
+Tests: `uv run --extra ml python -m unittest matcher/test_matcher.py catalog/test_scrape_site.py experiments/test_scripts.py`

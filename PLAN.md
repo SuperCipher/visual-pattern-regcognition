@@ -1,6 +1,6 @@
 # PLAN: Interior surface → product matcher
 
-Status: **step 1 in progress** (scripts and labels done; model runs need an OpenRouter key)
+Status: **step 1 done** (Qwen3-VL chosen, see step1-results.md). Step 2 waiting on product data.
 
 ## Goal
 A self-serve web app where a client uploads an interior photo. The app finds every finished
@@ -11,9 +11,13 @@ the same material, and suggests the closest products from a 2,000–5,000 item c
 - At most ~1,000 recognitions a week. Keep running cost near zero.
 - Prefer a static site on a CDN, with no servers to run.
 
+## Product (confirmed by Pat 2026-11-23)
+- Every product is an **HPL laminate decor**. The catalog is 2,000–5,000 decors that imitate other
+  materials: woodgrain, stone/marble, solid colours, concrete, metal, fabric, patterns.
+- So matching is "which decor gives this surface's look": decor category first, then colour and
+  pattern. Painted and plastered walls map to solid-colour decors.
+
 ## Assumptions (confirmed by Pat)
-- The catalog covers several material families, for example plaster textures, wood veneer, stone
-  and marble, tiles and mosaic, and wallpaper. It isn't only the plaster sheet.
 - Client photos look like `samples/interiors/`: well lit, design-magazine style, with 2–4
   distinct materials per photo.
 - Results are "closest look from our range", ranked, never "no match".
@@ -47,6 +51,10 @@ catalog.json on the CDN: id, name, family, colour, image URL, embedding (int8)
    - Compare detection quality, family accuracy, latency and cost per image. Pick one.
    - Output: `experiments/` folder plus a short results table.
 2. **Catalog + matching**
+   - Map detected families to HPL decor categories (paint/plaster → solid colour, tile/mosaic/wallpaper
+     → closest pattern or colour decor).
+   - For solid colours, rank mainly by lighting-corrected colour; for wood and stone, by image embedding.
+   - Prompt tweak so small surfaces (column bases, trims) aren't missed.
    - Script: product images + CSV → `catalog.json` with embeddings.
    - Crop → embed → dedupe → rank, checked on the sample photos (is the right product in the top 5?).
 3. **Web app**
@@ -79,7 +87,7 @@ Commit point: end of step 1, on a branch, with a draft PR.
   are weaker at naming materials.
 
 ## Needs from Pat
-- Product data: a CSV or list (id, name, family, colour) plus one image per product, or a sample
-  of ~50 for step 2.
+- Product data: a CSV or list (decor code, name, decor category, finish) plus one swatch image
+  per decor, or a sample of ~50 for step 2.
 - An API key for the chosen VLM before step 1 runs (OpenRouter or Alibaba DashScope for Qwen,
   Google AI Studio for Gemini).
