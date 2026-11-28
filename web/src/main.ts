@@ -213,12 +213,6 @@ app.addEventListener("click", (e) => {
       /* storage blocked */
     }
     return render();
-fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
-  .then((r) => {
-    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
-    if (hasExample && view.kind === "upload") render();
-  })
-  .catch(() => {});
   }
   if (el.closest("#example")) return void startExample();
   if (el.closest("#again")) return setView({ kind: "upload" });
@@ -226,24 +220,12 @@ fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
   if (alt) {
     featured[Number(alt.dataset.group)] = Number(alt.dataset.pick);
     return render();
-fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
-  .then((r) => {
-    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
-    if (hasExample && view.kind === "upload") render();
-  })
-  .catch(() => {});
   }
   const card = el.closest<HTMLElement>(".card");
   if (card && !el.closest("a")) {
     const gi = Number(card.dataset.group);
     litGroup = litGroup === gi ? null : gi;
     render();
-fetch(`${import.meta.env.BASE_URL}mock/example.json`, { method: "HEAD" })
-  .then((r) => {
-    hasExample = r.ok && (r.headers.get("content-type") ?? "").includes("json");
-    if (hasExample && view.kind === "upload") render();
-  })
-  .catch(() => {});
   }
 });
 
