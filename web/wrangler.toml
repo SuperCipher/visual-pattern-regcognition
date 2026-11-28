@@ -1,0 +1,31 @@
+# One Worker serves the site (dist/) and /api/match. Deploy: pnpm build && wrangler deploy
+name = "blackbone-decor-finder"
+main = "worker/index.ts"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./dist"
+run_worker_first = ["/api/*"]
+
+[vars]
+OPENROUTER_MODEL = "qwen/qwen3-vl-235b-a22b-instruct"
+# Printed by `modal deploy service/modal_app.py`: replace <workspace> with your Modal workspace name.
+MODAL_EMBED_URL = "https://<workspace>--blackbone-siglip-siglip-embed.modal.run"
+MODAL_WARM_URL = "https://<workspace>--blackbone-siglip-siglip-warm.modal.run"
+
+# 10 photos per minute per IP.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
+# Secrets, set by Pat (never committed):
+#   wrangler secret put OPENROUTER_API_KEY
+#   wrangler secret put MODAL_KEY        # a Modal proxy auth token (Modal dashboard > Settings)
+#   wrangler secret put MODAL_SECRET
+#   wrangler secret put TURNSTILE_SECRET
