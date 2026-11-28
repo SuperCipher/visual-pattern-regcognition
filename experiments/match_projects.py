@@ -35,7 +35,6 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Iterable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -52,6 +51,7 @@ from catalog.build_index import slug
 from matcher.colour import main_lab
 from matcher.embed import load_embedder
 from matcher.rank import HUB_WEIGHT, CatalogIndex, hub_scores, rank
+from matcher.service import crop
 
 CATALOG = ROOT / "catalog"
 OUT = ROOT / "experiments" / "out" / "projects"
@@ -67,7 +67,6 @@ CATEGORY_MODE = {
 }
 HUB_MODES = {"auto-hub"}
 WHOLE = (0.0, 0.0, 1000.0, 1000.0)
-MIN_BOX_SIDE = 40  # ignore slivers narrower than this many pixels
 
 
 @dataclass(frozen=True)
@@ -89,16 +88,6 @@ class PhotoResult:
 
 
 # ---------------------------------------------------------------- pure helpers
-
-
-def crop(img: Image.Image, box: Iterable[float]) -> Image.Image | None:
-    """Crop a 0-1000 normalised box; None if it is too small to say anything about the material."""
-    w, h = img.size
-    x1, y1, x2, y2 = box
-    px = (int(x1 * w / 1000), int(y1 * h / 1000), int(x2 * w / 1000), int(y2 * h / 1000))
-    if px[2] - px[0] < MIN_BOX_SIDE or px[3] - px[1] < MIN_BOX_SIDE:
-        return None
-    return img.crop(px)
 
 
 def hit(result: PhotoResult, k: int) -> bool:

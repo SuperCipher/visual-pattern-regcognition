@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractJson, parseSurfaces } from "./surfaces";
+import { WHOLE_PHOTO, attachEmbeddings, extractJson, parseSurfaces } from "./surfaces";
 
 describe("extractJson (as run_vlm.extract_json)", () => {
   it("reads fenced JSON", () => expect(extractJson('Here:\n```json\n{"a": 1}\n```')).toEqual({ a: 1 }));
@@ -22,4 +22,19 @@ describe("parseSurfaces (as run_vlm.parse_surfaces)", () => {
     expect(out[1]!.family).toBe("other");
   });
   it("returns [] for a payload without surfaces", () => expect(parseSurfaces({})).toEqual([]));
+});
+
+describe("attachEmbeddings", () => {
+  const e = (x: number) => ({ embedding: [x], lab: [x, 0, 0] });
+  const s = (g: string) => ({ ...WHOLE_PHOTO, box: [0, 0, 500, 500] as [number, number, number, number], materialGroup: g });
+  it("drops surfaces whose crop was too small", () => {
+    const out = attachEmbeddings([s("A"), s("B")], [e(1), null, e(9)]);
+    expect(out.map((x) => [x.materialGroup, x.embedding[0]])).toEqual([["A", 1]]);
+  });
+  it("falls back to the whole photo when nothing is usable", () => {
+    const out = attachEmbeddings([s("A")], [null, e(9)]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ box: [0, 0, 1000, 1000], embedding: [9] });
+    expect(attachEmbeddings([], [e(7)])[0]!.embedding).toEqual([7]);
+  });
 });

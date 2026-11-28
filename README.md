@@ -81,43 +81,53 @@ Tests: `uv run --extra ml python -m unittest matcher/test_matcher.py catalog/tes
 
 ## Step 3: web app (in progress)
 
-A static site served by a Cloudflare Worker. The Worker hides the OpenRouter key and asks
-Qwen3-VL for the surfaces; the browser embeds each crop with SigLIP (transformers.js) and ranks
-the catalog itself. Node, pnpm and wrangler come from the flake dev shell.
+```
+browser (static site)  --photo-->  Cloudflare Worker /api/match
+                                     1. Qwen3-VL (OpenRouter): surfaces, families, material groups
+                                     2. SigLIP on Modal (serverless): embedding + colour per crop
+browser  <--surfaces-- Worker;  browser groups same-material surfaces and ranks the catalog
+```
 
-The browser and the catalog must use the same model weights, so the catalog index for the web
-is built with the ONNX file the browser downloads (the `onnx:` embedder runs it with onnxruntime):
+- One Cloudflare Worker serves the site (`web/dist`) and `/api/match`; it holds the OpenRouter
+  key and the Modal token. Abuse limits: Turnstile, 10 photos per minute per IP, a 2 MB image
+  cap, and the credit limit you set on the OpenRouter key.
+- `service/modal_app.py` runs the exact step 2 model (`google/siglip-base-patch16-224`, full
+  precision) on 2 CPU cores, billed per second and nothing while idle. The Worker wakes it at the
+  start of each request so a cold start overlaps the Qwen call.
+- The catalog (`web/public/catalog/`) must be built with the same model:
 
 ```bash
-uv run --extra ml catalog/build_index.py --models onnx:Xenova/siglip-base-patch16-224:quantized
-uv run --extra ml experiments/match_projects.py --models onnx:Xenova/siglip-base-patch16-224:quantized
+uv run --extra ml catalog/build_index.py --models google/siglip-base-patch16-224
 uv run catalog/export_web.py      # -> web/public/catalog/ (decors.json, embeddings.bin, swatches/)
+uv run experiments/make_web_mock.py --project 2122 --photo 1BC46F9A   # optional "Try an example"
+```
+
+Deploy (inside `nix develop`; keys only ever typed in your own terminal):
+
+```bash
+uv run --extra modal modal token new                     # once
+uv run --extra modal modal deploy service/modal_app.py   # prints the two endpoint URLs
+# Modal dashboard > Settings > Proxy auth tokens: create one (key + secret)
+cd web && pnpm install && pnpm test && pnpm lint
+# put the two URLs in wrangler.toml [vars]
+cp .dev.vars.example .dev.vars   # fill in for local testing (gitignored)
+pnpm dev:worker                  # http://localhost:8787
+wrangler login                   # once
+wrangler secret put OPENROUTER_API_KEY
+wrangler secret put MODAL_KEY
+wrangler secret put MODAL_SECRET
+wrangler secret put TURNSTILE_SECRET   # and build with VITE_TURNSTILE_SITE_KEY set
+pnpm deploy
 ```
 
 | Path | What it does |
 |---|---|
+| `service/modal_app.py`, `matcher/service.py` | SigLIP embedding service (crop, embed, colour) |
 | `catalog/export_web.py` | Writes one index as static files for the web app |
+| `web/worker/` | The Worker: `/api/match` and the static site |
 | `web/src/match/` | TypeScript port of colour, ranking (auto mode) and same-material grouping |
 | `experiments/make_web_fixtures.py` | Regenerates the fixtures that make the TypeScript tests match Python |
 
-Run and deploy (from `web/`, inside `nix develop`):
-
-```bash
-pnpm install
-pnpm test && pnpm lint
-pnpm dev                       # UI only; add ?mock to replay the example without API calls
-cp .dev.vars.example .dev.vars # then put your OpenRouter key in it (gitignored)
-pnpm dev:worker                # site + /api/surfaces on http://localhost:8787
-wrangler login                 # once
-wrangler secret put OPENROUTER_API_KEY
-wrangler secret put TURNSTILE_SECRET   # and set VITE_TURNSTILE_SITE_KEY when building
-pnpm deploy
-```
-
-One Worker serves both the static site (`web/dist`) and `/api/surfaces`, so there is no CORS and
-one deploy. Abuse limits: Turnstile, 10 requests per minute per IP, a 2 MB image cap, and the
-credit limit you set on the OpenRouter key.
-
-Web tests and lint: `cd web && pnpm install && pnpm test && pnpm lint`. If you change
-`matcher/colour.py` or `matcher/rank.py`, run `uv run experiments/make_web_fixtures.py` and port
-the change to `web/src/match/`.
+UI only: `cd web && pnpm dev`, then add `?mock` to the URL to replay the example without API calls.
+If you change `matcher/colour.py` or `matcher/rank.py`, run `uv run experiments/make_web_fixtures.py`
+and port the change to `web/src/match/`.

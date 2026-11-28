@@ -1,14 +1,14 @@
 """Export one catalog index as static files for the web app.
 
 Usage (from the repo root, after catalog/build_index.py with the same --model):
-    uv run --extra ml catalog/build_index.py --models onnx:Xenova/siglip-base-patch16-224:quantized
-    uv run catalog/export_web.py --model onnx:Xenova/siglip-base-patch16-224:quantized
+    uv run --extra ml catalog/build_index.py --models google/siglip-base-patch16-224
+    uv run catalog/export_web.py
 
 Writes web/public/catalog/:
     decors.json      {model, dim, decors: [{code, variant, name, category, url, swatch, lab}]}
     embeddings.bin   float16, little-endian, row-major (len(decors), dim), same order as decors
     swatches/<file>  160 px JPEG per decor
-The web app must run the same ONNX file the index was built with (see web/src/embed.ts).
+The embedding service (service/modal_app.py) must run the same model the index was built with.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def export(index: CatalogIndex, products: list[dict], catalog_dir: Path, out: Pa
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", default="onnx:Xenova/siglip-base-patch16-224:quantized")
+    ap.add_argument("--model", default="google/siglip-base-patch16-224")
     ap.add_argument("--catalog", type=Path, default=ROOT / "catalog")
     ap.add_argument("--out", type=Path, default=ROOT / "web" / "public" / "catalog")
     args = ap.parse_args()

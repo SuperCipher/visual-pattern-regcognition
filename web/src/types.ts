@@ -31,10 +31,8 @@ export interface PipelineResult {
   groups: GroupOut[];
 }
 
-export type Step = "model" | "surfaces" | "matching";
+export type Step = "surfaces" | "matching";
 
 export interface Progress {
   step: Step;
-  /** 0-1 when known (model download), else undefined. */
-  fraction?: number;
 }

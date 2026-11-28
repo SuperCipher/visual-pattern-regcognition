@@ -85,18 +85,11 @@ function photoFrame(photo: string, result: PipelineResult | null, scanning: bool
 
 function processingView(v: Extract<View, { kind: "processing" }>): string {
   const s = t();
-  const order: Step[] = ["model", "surfaces", "matching"];
+  const order: Step[] = ["surfaces", "matching"];
   const at = order.indexOf(v.progress.step);
-  const label = { model: s.stepModel, surfaces: s.stepSurfaces, matching: s.stepMatching };
+  const label = { surfaces: s.stepSurfaces, matching: s.stepMatching };
   const items = order
-    .map((step, i) => {
-      const cls = i < at ? "done" : i === at ? "active" : "";
-      const bar =
-        i === at && v.progress.fraction !== undefined
-          ? `<span></span><div class="bar"><i style="width:${Math.round(v.progress.fraction * 100)}%"></i></div>`
-          : "";
-      return `<li class="${cls}">${esc(label[step])}</li>${bar}`;
-    })
+    .map((step, i) => `<li class="${i < at ? "done" : i === at ? "active" : ""}">${esc(label[step])}</li>`)
     .join("");
   return `<main class="wrap layout">${photoFrame(v.photo, null, true)}
     <section class="steps" aria-live="polite"><ol>${items}</ol></section></main>`;
@@ -178,7 +171,7 @@ function setView(v: View): void {
 async function start(photo: string, run: (p: (x: Progress) => void) => Promise<PipelineResult>): Promise<void> {
   featured = [];
   litGroup = null;
-  setView({ kind: "processing", photo, progress: { step: "model", fraction: 0 } });
+  setView({ kind: "processing", photo, progress: { step: "surfaces" } });
   try {
     const result = await run((progress) => {
       if (view.kind === "processing") setView({ ...view, progress });
@@ -194,7 +187,6 @@ async function start(photo: string, run: (p: (x: Progress) => void) => Promise<P
 function readFile(file: File | undefined): void {
   if (!file || !file.type.startsWith("image/")) return;
   const box = document.querySelector<HTMLElement>("#turnstile")!;
-  // The pipeline (and transformers.js, ~1 MB) loads only when a photo is chosen.
   void start(URL.createObjectURL(file), async (p) =>
     MOCK ? runMock(p) : (await import("./pipeline")).runPipeline(file, box, p),
   );

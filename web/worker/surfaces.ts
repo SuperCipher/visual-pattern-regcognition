@@ -64,3 +64,39 @@ export function parseSurfaces(payload: unknown): VlmSurface[] {
   }
   return out;
 }
+
+export interface MatchedSurface extends VlmSurface {
+  embedding: number[];
+  lab: [number, number, number];
+}
+
+/** Matches the whole photo; used when no surface crop is usable (never "no match"). */
+export const WHOLE_PHOTO: VlmSurface = {
+  box: [0, 0, 1000, 1000],
+  surfaceType: "other",
+  family: "other",
+  pattern: "",
+  colour: "",
+  materialGroup: "A",
+  confidence: 0,
+};
+
+/**
+ * Join the service's per-box results to the surfaces. `embedded` has one entry per surface plus
+ * a last one for the whole photo; null entries (crops too small) are dropped.
+ */
+export function attachEmbeddings(
+  surfaces: VlmSurface[],
+  embedded: ({ embedding: number[]; lab: number[] } | null)[],
+): MatchedSurface[] {
+  const out: MatchedSurface[] = [];
+  surfaces.forEach((s, i) => {
+    const e = embedded[i];
+    if (e) out.push({ ...s, embedding: e.embedding, lab: e.lab as [number, number, number] });
+  });
+  const whole = embedded[surfaces.length];
+  if (!out.length && whole) {
+    out.push({ ...WHOLE_PHOTO, embedding: whole.embedding, lab: whole.lab as [number, number, number] });
+  }
+  return out;
+}

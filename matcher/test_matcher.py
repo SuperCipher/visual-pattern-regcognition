@@ -211,6 +211,22 @@ class PipelineTests(unittest.TestCase):
             [t.codes[0] for t in mp.match_photo(img, surfaces, emb, index, "auto-hub", 5)], ["W-1", "S-1"]
         )
 
+    def test_service_embeds_usable_boxes_and_skips_slivers(self) -> None:
+        import base64
+        import io
+
+        from matcher.service import decode_image, embed_surfaces
+
+        img = Image.new("RGB", (2000, 1000), (150, 100, 60))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        decoded = decode_image("data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode())
+        self.assertEqual(decoded.size, (1280, 640))
+        out = embed_surfaces(decoded, [[0, 0, 500, 1000], [0, 0, 5, 5]], ColourHistEmbedder())
+        self.assertIsNone(out[1])
+        self.assertEqual(len(out[0]["embedding"]), 64)
+        self.assertGreater(out[0]["lab"][0], 40)
+
     def test_metrics(self) -> None:
         box = (0, 0, 1000, 1000)
         r1 = mp.PhotoResult(
